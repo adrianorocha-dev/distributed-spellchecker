@@ -18,16 +18,16 @@ while(True):
 
     spellchecker = SpellChecker()
 
-    in_data = json.loads(msg)
-
-    words = spellchecker.split_words(in_data)
+    words = spellchecker.split_words(msg)
 
     wrong_indices = []
 
-    for i in range(len(words)):
-        if spellchecker.correction(words[i]) != words[i]:
-            print("{} is wrong. Correct is {}".format(words[i], spellchecker.correction(words[i])))
-            wrong_indices.append(i)
+    # for i in range(len(words)):
+    #     if spellchecker.correction(words[i]) != words[i]:
+    #         print("{} is wrong. Correct is {}".format(words[i], spellchecker.correction(words[i])))
+    #         wrong_indices.append(i)
+
+    wrong_indices = list(spellchecker.unknown(words))
     
     data = {
         'wrong_words': wrong_indices
