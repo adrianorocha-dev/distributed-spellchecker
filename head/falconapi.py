@@ -1,30 +1,133 @@
 import falcon, json
 from falcon.http_status import HTTPStatus
-
+#from falcon import media
 import socket
+import threading
+import time
 
-class BillGenerator():
-    def on_get(self, req, resp):
-        resp.body = json.dumps(15)
+config = json.loads(open('config.json').read())
+print('loaded config: ', config)
+
+# Class to take care of the nodes
+class Node():
+    def __init__(self, s_client, ip):
+        super().__init__()
+        self.s_client = s_client
+        self.ip = ip
+        
+        self.latency = None
+        self.cpu_usage = None
+    
+    def __eq__(self, value):
+        return self.ip == value.ip
+
+# Function to listen to new nodes that want to offer processing
+def listen_for_nodes(node_list, port):
+    server = socket.socket()
+    server.bind(('', port))
+    server.listen(5)
+
+    while True:
+        c, addr = server.accept()
+
+        node = Node(c, addr[0])
+
+        if node in nodes:
+            return
+
+        print("Node {} registered itself.".format(node.ip))
+        
+        msg = node.s_client.recv(1024).decode(encoding='utf-8')
+
+        if msg == 'connect':
+            node_list.append(node)
+        
+        c.close()
+
+nodes = []
+
+# Creating socket server so nodes can add themselves to the head.
+node_listen_thread = threading.Thread(target=listen_for_nodes, args=(nodes, config['listen_port']))
+node_listen_thread.start()
+
+# Function to verify if nodes are still connected
+def verify_available_nodes():
+    global nodes
+
+    for node in nodes:
+        try:
+            connection = socket.socket()
+            print(node.ip)
+            connection.connect((node.ip, config['port']))
+            connection.send('ping'.encode(encoding='utf-8'))
+            
+            start = time.time_ns()
+            r = connection.recv(1024)
+            end = time.time_ns()
+
+            connection.close()
+
+            node.latency = end - start
+        except socket.timeout:
+            nodes.remove(node)
 
 class Spellcheck():
-    def on_get(self, req, resp):
+    
+    def on_post(self, req, resp):
+        global nodes
+
         resp.status = falcon.HTTP_200
-        data = req.get_param('text')
+        #data = req.bounded_stream.read()
 
-        s = socket.socket()
+        data = req.media.get('text')
 
-        s.connect(('localhost', 12345))
+        print(data)
 
-        s.send(data.encode(encoding='utf-8'))
+        # removing disconnected nodes
+        verify_available_nodes()
 
-        result = s.recv(1024).decode(encoding='utf-8')
+        if len(nodes) < 1:
+            print("No nodes are available")
 
-        wrong_indices = json.loads(result)
+        words = data.split(' ')
 
-        print(wrong_indices)
 
-        resp.body = json.dumps(wrong_indices)
+        print("dividing {} words to {} nodes".format(len(words), len(nodes)))
+        n_words_per_node = len(words) // len(nodes)
+        print("sending {} words to each node".format(n_words_per_node))
+
+        wrong_words = []
+        bill = 0
+
+        #TODO criar uma thread para cada nó
+        for i in range(len(nodes)):
+            if i < len(nodes)-1 :
+                msg_split = ' '.join(words[i*n_words_per_node:(i+1)*n_words_per_node])
+            else:
+                msg_split = ' '.join(words[i*n_words_per_node:])
+
+            s = socket.socket()
+
+            s.connect((nodes[i].ip, config['port']))
+
+            print('Connected to node, sending data...')
+
+            s.sendall(msg_split.encode(encoding='utf-8'))
+
+            print('waiting for response...')
+
+            result = s.recv(1024).decode(encoding='utf-8')
+            result = json.loads(result)
+
+            wrong_words += result['wrong_words']
+            bill += result['bill']
+        
+        result_data = {
+            'wrong_words': wrong_words,
+            'bill': bill
+        }
+
+        resp.body = json.dumps(result_data)
 
 class HandleCORS(object):
     def process_request(self, req, resp):
@@ -37,5 +140,4 @@ class HandleCORS(object):
     
 api = falcon.API(middleware=[HandleCORS()])
 
-api.add_route('/bill', BillGenerator())
 api.add_route('/spellcheck', Spellcheck())

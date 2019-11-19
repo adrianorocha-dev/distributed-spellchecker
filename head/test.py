@@ -2,7 +2,7 @@ import socket, json
 
 s = socket.socket()
 
-s.connect(('localhost', 12345))
+s.connect(('10.180.15.183', 12345))
 
 s.send(json.dumps('asdkjs asdkjas asdj,asmda asdjk, sa').encode(encoding='utf-8'))
 
