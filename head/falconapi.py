@@ -5,6 +5,10 @@ import socket
 import threading
 import time
 
+from sjcl import SJCL
+
+sjcl = SJCL()
+
 config = json.loads(open('config.json').read())
 print('loaded config: ', config)
 
@@ -44,6 +48,13 @@ def listen_for_nodes(node_list, port):
         
         c.close()
 
+def decode_cipher_dict(cipher_dict):
+    for k, v in cipher_dict.items():
+        if type(v) == bytes:
+            cipher_dict[k] = v.decode()
+    
+    return cipher_dict
+
 nodes = []
 
 # Creating socket server so nodes can add themselves to the head.
@@ -68,7 +79,7 @@ def verify_available_nodes():
             connection.close()
 
             node.latency = end - start
-        except socket.timeout:
+        except:
             nodes.remove(node)
 
 class Spellcheck():
@@ -83,11 +94,25 @@ class Spellcheck():
 
         print(data)
 
+        data = json.loads(data)
+
+        data = sjcl.decrypt(data, '12345').decode()
+
         # removing disconnected nodes
         verify_available_nodes()
 
         if len(nodes) < 1:
-            print("No nodes are available")
+            result_data = { 'wrong_words': [], 'bill': 0, 'errors': ["Nenhum nó de processamento disponível."] }
+            
+            result_data = decode_cipher_dict( sjcl.encrypt(json.dumps(result_data).encode(), '12345') )
+            resp.body = json.dumps(result_data)
+            return
+
+        # Balanceamento
+        total_latency = sum([node.latency for node in nodes])
+
+        node_percentage = [node.latency / total_latency for node in nodes]
+        node_percentage.reverse()
 
         words = data.split(' ')
 
@@ -99,7 +124,6 @@ class Spellcheck():
         wrong_words = []
         bill = 0
 
-        #TODO criar uma thread para cada nó
         for i in range(len(nodes)):
             if i < len(nodes)-1 :
                 msg_split = ' '.join(words[i*n_words_per_node:(i+1)*n_words_per_node])
@@ -112,12 +136,16 @@ class Spellcheck():
 
             print('Connected to node, sending data...')
 
-            s.sendall(msg_split.encode(encoding='utf-8'))
+            cipher_msg = decode_cipher_dict( sjcl.encrypt(msg_split.encode(), '12345') )
+            print(cipher_msg)
+            s.sendall(json.dumps(cipher_msg).encode('utf-8'))
 
             print('waiting for response...')
 
             result = s.recv(1024).decode(encoding='utf-8')
             result = json.loads(result)
+
+            result = json.loads(sjcl.decrypt(result, '12345'))
 
             wrong_words += result['wrong_words']
             bill += result['bill']
@@ -127,6 +155,9 @@ class Spellcheck():
             'bill': bill
         }
 
+        result_data = decode_cipher_dict( sjcl.encrypt(json.dumps(result_data).encode(), '12345') )
+
+        print("Sending result: ", result_data)
         resp.body = json.dumps(result_data)
 
 class HandleCORS(object):
