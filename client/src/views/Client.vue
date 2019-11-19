@@ -80,6 +80,8 @@
 <script>
 import Axios from 'axios'
 
+var crypto_key = "sdofkj;ahlfhworiuqeb";
+
 export default {
     data() {
         return {
@@ -101,17 +103,26 @@ export default {
             // var formData = new FormData();
             // formData.append("text", text);
 
-            var formData = { text: text }
+            var sjcl = require('sjcl');
+            var formData = { text: sjcl.encrypt(crypto_key, text) };
 
-            Axios.post('http://192.168.43.125:8000/spellcheck', JSON.stringify(formData), {
+            Axios.post('http://10.180.15.208:8000/spellcheck', JSON.stringify(formData), {
                 headers: {
                     'Content-Type': 'application/json'
                 }
             }).then(response => {
                 console.log(response.data);
+
+                var data = response.data// sjcl.decrypt('12345', response.data);
+
+                console.log(data);
+
+                if (data.errors) {
+                    alert(data.errors);
+                }
                 this.showText = text.split(' ');
-                this.bill += response.data.bill;
-                this.showErrors(response.data.wrong_words);
+                this.bill += data.bill;
+                this.showErrors(data.wrong_words);
             });
         }
 

@@ -1,6 +1,7 @@
 {
-    "head_ip": "192.168.43.125",
+    "head_ip": "10.180.15.208",
     "ping_port": 12321,
     "port": 12345,
-    "price_per_word": 1
+    "price_per_word": 0.2,
+    "crypto_key": "sdofkj;ahlfhworiuqeb"
 }

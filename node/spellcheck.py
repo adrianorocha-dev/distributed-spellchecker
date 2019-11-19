@@ -2,6 +2,10 @@ import socket, json
 from spellchecker import SpellChecker
 import time
 
+from sjcl import SJCL
+
+sjcl = SJCL()
+
 config = json.loads(open('config.json').read())
 print('loaded config: ', config)
 
@@ -16,6 +20,13 @@ def connect_to_head():
 
 def calculate_bill(n_words):
     return n_words * config['price_per_word']
+
+def decode_cipher_dict(cipher_dict):
+    for k, v in cipher_dict.items():
+        if type(v) == bytes:
+            cipher_dict[k] = v.decode()
+    
+    return cipher_dict
 
 connect_to_head()
 
@@ -33,20 +44,26 @@ while(True):
 
     print('{} connected.'.format(addr))
 
-    msg = ''
+    msg = b''
 
     while True:
         b = c.recv(4096)
-        msg += b.decode(encoding='utf-8')
+        msg += b
         if len(b) < 4096:
             break
-
-
-    print("received: {}".format(msg))
-
+    
+    msg = msg.decode(encoding='utf-8')
+    print('Message to received: ', msg)
+    
     if msg == 'ping':
         c.sendall(json.dumps('pong').encode(encoding='utf-8'))
         continue
+
+    msg = json.loads(msg)
+
+    msg = sjcl.decrypt(msg, config['crypto_key']).decode()
+
+    print("received: {}".format(msg))
 
     words = spellchecker.split_words(msg)
 
@@ -70,4 +87,7 @@ while(True):
 
     print(data)
 
-    c.send(json.dumps(data).encode(encoding='utf-8'))
+    cipher_data = decode_cipher_dict(sjcl.encrypt(json.dumps(data).encode(), config['crypto_key']))
+    print(cipher_data)
+
+    c.sendall(json.dumps(cipher_data).encode('utf-8'))

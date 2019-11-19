@@ -96,15 +96,13 @@ class Spellcheck():
 
         data = json.loads(data)
 
-        data = sjcl.decrypt(data, '12345').decode()
+        data = sjcl.decrypt(data, config['crypto_key']).decode()
 
         # removing disconnected nodes
         verify_available_nodes()
 
         if len(nodes) < 1:
             result_data = { 'wrong_words': [], 'bill': 0, 'errors': ["Nenhum nó de processamento disponível."] }
-            
-            result_data = decode_cipher_dict( sjcl.encrypt(json.dumps(result_data).encode(), '12345') )
             resp.body = json.dumps(result_data)
             return
 
@@ -114,21 +112,19 @@ class Spellcheck():
         node_percentage = [node.latency / total_latency for node in nodes]
         node_percentage.reverse()
 
+        print('Total percentage:', sum(node_percentage))
+
         words = data.split(' ')
-
-
-        print("dividing {} words to {} nodes".format(len(words), len(nodes)))
-        n_words_per_node = len(words) // len(nodes)
-        print("sending {} words to each node".format(n_words_per_node))
 
         wrong_words = []
         bill = 0
 
+        _start = 0
         for i in range(len(nodes)):
-            if i < len(nodes)-1 :
-                msg_split = ' '.join(words[i*n_words_per_node:(i+1)*n_words_per_node])
-            else:
-                msg_split = ' '.join(words[i*n_words_per_node:])
+
+            _end = _start + node_percentage[i] * len(words)
+            msg_split = ' '.join(words[int(_start):int(_end)])
+            print("Sending %.2f of the words (%d words)" % (node_percentage[i], int(_end-_start)))
 
             s = socket.socket()
 
@@ -136,7 +132,7 @@ class Spellcheck():
 
             print('Connected to node, sending data...')
 
-            cipher_msg = decode_cipher_dict( sjcl.encrypt(msg_split.encode(), '12345') )
+            cipher_msg = decode_cipher_dict( sjcl.encrypt(msg_split.encode(), config['crypto_key']) )
             print(cipher_msg)
             s.sendall(json.dumps(cipher_msg).encode('utf-8'))
 
@@ -145,7 +141,7 @@ class Spellcheck():
             result = s.recv(1024).decode(encoding='utf-8')
             result = json.loads(result)
 
-            result = json.loads(sjcl.decrypt(result, '12345'))
+            result = json.loads(sjcl.decrypt(result, config['crypto_key']))
 
             wrong_words += result['wrong_words']
             bill += result['bill']
@@ -155,9 +151,6 @@ class Spellcheck():
             'bill': bill
         }
 
-        result_data = decode_cipher_dict( sjcl.encrypt(json.dumps(result_data).encode(), '12345') )
-
-        print("Sending result: ", result_data)
         resp.body = json.dumps(result_data)
 
 class HandleCORS(object):
