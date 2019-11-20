@@ -92,8 +92,6 @@ class Spellcheck():
 
         data = req.media.get('text')
 
-        print(data)
-
         data = json.loads(data)
 
         data = sjcl.decrypt(data, config['crypto_key']).decode()
@@ -111,8 +109,6 @@ class Spellcheck():
 
         node_percentage = [node.latency / total_latency for node in nodes]
         node_percentage.reverse()
-
-        print('Total percentage:', sum(node_percentage))
 
         words = data.split(' ')
 
